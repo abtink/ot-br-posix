@@ -234,6 +234,8 @@ otbrError AdvertisingProxy::PublishHostAndItsServices(const otSrpServerHost *aHo
     bool                       hasUpdate    = false;
     std::string                fullHostName = otSrpServerHostGetFullName(aHost);
 
+    uint16_t counter = 0;
+
     otbrLogInfo("Advertise SRP service updates: host=%s", fullHostName.c_str());
 
     SuccessOrExit(error = SplitFullHostName(fullHostName, hostName, hostDomain));
@@ -258,6 +260,18 @@ otbrError AdvertisingProxy::PublishHostAndItsServices(const otSrpServerHost *aHo
     while ((service = otSrpServerHostFindNextService(aHost, service, OT_SRP_SERVER_FLAGS_BASE_TYPE_SERVICE_ONLY,
                                                      /* aServiceName */ nullptr, /* aInstanceName */ nullptr)))
     {
+        {
+            const char *name = otSrpServerServiceGetFullName(service);
+
+            otbrLogInfo("SRPSRVA - counter %d", counter++);
+
+            if (name == nullptr)
+            {
+                otbrLogInfo("SRPSRVA - name is NULL");
+                ExitNow(error = OTBR_ERROR_PARSE);
+            }
+        }
+
         std::string fullServiceName = otSrpServerServiceGetFullName(service);
         std::string serviceName;
         std::string serviceType;
