@@ -1,4 +1,4 @@
 var searchData=
 [
-  ['dnsnametype_1163',['DnsNameType',['../d9/d29/dns__utils_8hpp.html#acd12d41e145ce949df9c371551812640',1,'dns_utils.hpp']]]
+  ['httpmethod_1615',['HttpMethod',['../de/daa/rest_2types_8hpp.html#a06f5b86d59d177d419e9af98c501151b',1,'otbr::rest']]]
 ];
