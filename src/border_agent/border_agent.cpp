@@ -142,6 +142,9 @@ struct StateBitmap
 BorderAgent::BorderAgent(otbr::Ncp::ControllerOpenThread &aNcp)
     : mNcp(aNcp)
     , mPublisher(Mdns::Publisher::Create([this](Mdns::Publisher::State aNewState) { HandleMdnsState(aNewState); }))
+#if OTBR_ENABLE_DNSSD_PLAT
+    , mDnssdPlatform(aNcp, *mPublisher)
+#endif
 #if OTBR_ENABLE_SRP_ADVERTISING_PROXY
     , mAdvertisingProxy(aNcp, *mPublisher)
 #endif
@@ -184,6 +187,7 @@ void BorderAgent::Start(void)
     otbrError error = OTBR_ERROR_NONE;
 
     SuccessOrExit(error = mPublisher->Start());
+
 #if OTBR_ENABLE_SRP_ADVERTISING_PROXY
     mAdvertisingProxy.Start();
 #endif
@@ -222,6 +226,10 @@ BorderAgent::~BorderAgent(void)
 
 void BorderAgent::HandleMdnsState(Mdns::Publisher::State aState)
 {
+#if OTBR_ENABLE_DNSSD_PLAT
+    mDnssdPlatform.HandleMdnsPublisherStateChange(aState);
+#endif
+
     switch (aState)
     {
     case Mdns::Publisher::State::kReady:
