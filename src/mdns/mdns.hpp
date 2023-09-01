@@ -70,31 +70,48 @@ class Publisher : private NonCopyable
 {
 public:
     /**
-     * This structure represents a name/value pair of the TXT record.
+     * This structure represents a key/value pair of the TXT record.
      *
      */
     struct TxtEntry
     {
-        std::string          mName;  ///< The name of the TXT entry.
-        std::vector<uint8_t> mValue; ///< The value of the TXT entry.
+        std::string          mKey;                ///< The key of the TXT entry.
+        std::vector<uint8_t> mValue;              ///< The value of the TXT entry. Can be empty.
+        bool                 mIsBooleanAttribute; ///< This entry is boolean attribute (encoded as `key` without `=`).
 
-        TxtEntry(const char *aName, const char *aValue)
-            : TxtEntry(aName, reinterpret_cast<const uint8_t *>(aValue), strlen(aValue))
+        TxtEntry(const char *aKey, const char *aValue)
+            : TxtEntry(aKey, reinterpret_cast<const uint8_t *>(aValue), strlen(aValue))
         {
         }
 
-        TxtEntry(const char *aName, const uint8_t *aValue, size_t aValueLength)
-            : TxtEntry(aName, strlen(aName), aValue, aValueLength)
+        TxtEntry(const char *aKey, const uint8_t *aValue, size_t aValueLength)
+            : TxtEntry(aKey, strlen(aKey), aValue, aValueLength)
         {
         }
 
-        TxtEntry(const char *aName, size_t aNameLength, const uint8_t *aValue, size_t aValueLength)
-            : mName(aName, aNameLength)
+        TxtEntry(const char *aKey, size_t aKeyLength, const uint8_t *aValue, size_t aValueLength)
+            : mKey(aKey, aKeyLength)
             , mValue(aValue, aValue + aValueLength)
+            , mIsBooleanAttribute(false)
         {
         }
 
-        bool operator==(const TxtEntry &aOther) const { return mName == aOther.mName && mValue == aOther.mValue; }
+        TxtEntry(const char *aKey)
+            : TxtEntry(aKey, strlen(aKey))
+        {
+        }
+
+        TxtEntry(const char *aKey, size_t aKeyLength)
+            : mKey(aKey, aKeyLength)
+            , mIsBooleanAttribute(true)
+        {
+        }
+
+        bool operator==(const TxtEntry &aOther) const
+        {
+            return (mKey == aOther.mKey) && (mValue == aOther.mValue) &&
+                   (mIsBooleanAttribute == aOther.mIsBooleanAttribute);
+        }
     };
 
     typedef std::vector<TxtEntry>    TxtList;
