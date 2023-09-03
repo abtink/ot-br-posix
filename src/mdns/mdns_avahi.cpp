@@ -690,7 +690,12 @@ otbrError PublisherAvahi::PublishServiceImpl(const std::string &aHostName,
 
     otbrLogInfo("Commit avahi service %s.%s", serviceName.c_str(), aType.c_str());
     avahiError = avahi_entry_group_commit(group);
+
+    // Cauae a failure...
+    avahiError = AVAHI_ERR_INVALID_HOST_NAME;
+
     VerifyOrExit(avahiError == AVAHI_OK);
+
 
     AddServiceRegistration(std::unique_ptr<AvahiServiceRegistration>(new AvahiServiceRegistration(
         aHostName, serviceName, aType, sortedSubTypeList, aPort, sortedTxtList, std::move(aCallback), group, this)));

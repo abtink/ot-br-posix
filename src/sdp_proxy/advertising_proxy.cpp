@@ -221,6 +221,16 @@ exit:
     return;
 }
 
+static void UpdateStuff(std::string &fullHostName, const otSrpServerHost *aHost)
+{
+    fullHostName = otSrpServerHostGetFullName(aHost);
+}
+
+static void UpdateService(std::string &fullServiceName, const otSrpServerService *service)
+{
+    fullServiceName = otSrpServerServiceGetInstanceName(service);
+}
+
 otbrError AdvertisingProxy::PublishHostAndItsServices(const otSrpServerHost *aHost, OutstandingUpdate *aUpdate)
 {
     otbrError                  error = OTBR_ERROR_NONE;
@@ -232,7 +242,16 @@ otbrError AdvertisingProxy::PublishHostAndItsServices(const otSrpServerHost *aHo
     const otSrpServerService  *service;
     otSrpServerServiceUpdateId updateId     = 0;
     bool                       hasUpdate    = false;
-    std::string                fullHostName = otSrpServerHostGetFullName(aHost);
+    std::string                fullHostName;
+
+    if (otSrpServerHostGetFullName(aHost) == nullptr)
+    {
+        otbrLogWarning("ABTIN ~~~ otSrpServerHostGetFullName() is null WHY?");
+        error = OTBR_ERROR_INVALID_ARGS;
+        ExitNow();
+    }
+
+    UpdateStuff(fullHostName, aHost);
 
     otbrLogInfo("Advertise SRP service updates: host=%s", fullHostName.c_str());
 
@@ -256,10 +275,20 @@ otbrError AdvertisingProxy::PublishHostAndItsServices(const otSrpServerHost *aHo
     service = nullptr;
     while ((service = otSrpServerHostGetNextService(aHost, service)) != nullptr)
     {
-        std::string fullServiceName = otSrpServerServiceGetInstanceName(service);
+        std::string fullServiceName;
         std::string serviceName;
         std::string serviceType;
         std::string serviceDomain;
+
+        if (otSrpServerServiceGetInstanceName(service) == nullptr)
+        {
+            otbrLogWarning("ABTIN ~~~ otSrpServerServiceGetInstanceName() is null WHY?");
+            error = OTBR_ERROR_INVALID_ARGS;
+            ExitNow();
+        }
+
+        UpdateService(fullServiceName, service);
+        // fullServiceName = otSrpServerServiceGetInstanceName(service);
 
         SuccessOrExit(error = SplitFullServiceInstanceName(fullServiceName, serviceName, serviceType, serviceDomain));
 
