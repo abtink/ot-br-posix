@@ -46,6 +46,8 @@
 
 using namespace otbr;
 
+xxx; // CAUSE ERROR
+
 static struct Context
 {
     Mdns::Publisher *mPublisher;
