@@ -259,6 +259,7 @@ void PublisherMDnsSd::Stop(StopMode aStopMode)
 
     mServiceRegistrations.clear();
     mHostRegistrations.clear();
+    mKeyRegistrations.clear();
     DeallocateHostsRef();
 
     mSubscribedServices.clear();
@@ -668,6 +669,9 @@ void PublisherMDnsSd::UnpublishService(const std::string &aName, const std::stri
     otbrError error = OTBR_ERROR_NONE;
 
     VerifyOrExit(mState == Publisher::State::kReady, error = OTBR_ERROR_INVALID_STATE);
+
+    // TODO: check if we have an key ref and if so, switch it to use other API?
+
     RemoveServiceRegistration(aName, aType, OTBR_ERROR_ABORTED);
 
 exit:

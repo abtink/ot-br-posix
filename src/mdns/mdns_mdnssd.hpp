@@ -70,6 +70,7 @@ public:
     void UnpublishService(const std::string &aName, const std::string &aType, ResultCallback &&aCallback) override;
 
     void      UnpublishHost(const std::string &aName, ResultCallback &&aCallback) override;
+    void      UnpublishKey(const std::string &aName, ResultCallback &&aCallback) override;
     void      SubscribeService(const std::string &aType, const std::string &aInstanceName) override;
     void      UnsubscribeService(const std::string &aType, const std::string &aInstanceName) override;
     void      SubscribeHost(const std::string &aHostName) override;
@@ -94,6 +95,7 @@ protected:
     otbrError PublishHostImpl(const std::string &aName,
                               const AddressList &aAddress,
                               ResultCallback   &&aCallback) override;
+    otbrError PublishKeyImpl(const std::string &aName, const KeyData &aKeyData, ResultCallback &&aCallback) override;
     void      OnServiceResolveFailedImpl(const std::string &aType,
                                          const std::string &aInstanceName,
                                          int32_t            aErrorCode) override;
@@ -135,6 +137,8 @@ private:
         DNSServiceRef mServiceRef = nullptr;
     };
 
+    class DnssdKeyRegistration;
+
     class DnssdHostRegistration : public HostRegistration
     {
     public:
@@ -156,6 +160,30 @@ private:
 
         std::vector<DNSRecordRef> mAddrRecordRefs;
         std::vector<bool>         mAddrRegistered;
+        DnssdKeyRegistration *    mKeyRegistration;
+    };
+
+    class DnssdKeyRegistration : public KeyRegistration
+    {
+    public:
+        DnssdKeyRegistration(const std::string &aName,
+                             const KeyData     &aKeyData,
+                             ResultCallback   &&aCallback,
+                             DNSServiceRef      aServiceRef,
+                             DNSRecordRef       aRecordRef,
+                             Publisher         *aPublisher)
+            : KeyRegistration(aName, aKeyData, std::move(aCallback), aPublisher)
+            , mServiceRegistration(nullptr)
+            , mServiceRef(aServiceRef)
+            , mRecordRef(aRecordRef)
+        {
+        }
+
+        ~DnssdKeyRegistration(void) override;
+
+        DnssdServiceRegistration *mServiceRegistration;
+        DNSServiceRef             mServiceRef;
+        DNSRecordRef              mRecordRef;
     };
 
     struct ServiceRef : private ::NonCopyable
