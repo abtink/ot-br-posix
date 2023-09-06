@@ -794,6 +794,15 @@ otbrError PublisherAvahi::TxtDataToAvahiStringList(const TxtData    &aTxtData,
                                                    size_t            aBufferSize,
                                                    AvahiStringList *&aHead)
 {
+
+    OTBR_UNUSED_VARIABLE(aTxtData);
+    OTBR_UNUSED_VARIABLE(aBuffer);
+    OTBR_UNUSED_VARIABLE(aBufferSize);
+
+    aHead = nullptr;
+    return OTBR_ERROR_NONE;
+
+#if 0
     otbrError        error = OTBR_ERROR_NONE;
     size_t           used  = 0;
     AvahiStringList *last  = nullptr;
@@ -803,6 +812,8 @@ otbrError PublisherAvahi::TxtDataToAvahiStringList(const TxtData    &aTxtData,
     const uint8_t   *dataEnd = aTxtData.data() + aTxtData.size();
 
     aHead = nullptr;
+
+
 
     while (data < dataEnd)
     {
@@ -832,8 +843,8 @@ otbrError PublisherAvahi::TxtDataToAvahiStringList(const TxtData    &aTxtData,
 
     aHead = last;
 
-exit:
     return error;
+#endif
 }
 
 Publisher::ServiceRegistration *PublisherAvahi::FindServiceRegistration(const AvahiEntryGroup *aEntryGroup)
