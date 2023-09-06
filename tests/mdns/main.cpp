@@ -84,10 +84,11 @@ int RunMainloop(void)
 
 void PublishSingleServiceWithCustomHost(void *aContext, Mdns::Publisher::State aState)
 {
-    uint8_t    xpanid[kSizeExtPanId]           = {0x41, 0x42, 0x43, 0x44, 0x45, 0x46, 0x47, 0x48};
-    uint8_t    extAddr[kSizeExtAddr]           = {0x41, 0x42, 0x43, 0x44, 0x45, 0x46, 0x47, 0x48};
-    uint8_t    hostAddr[OTBR_IP6_ADDRESS_SIZE] = {0};
-    const char hostName[]                      = "custom-host";
+    uint8_t              xpanid[kSizeExtPanId]           = {0x41, 0x42, 0x43, 0x44, 0x45, 0x46, 0x47, 0x48};
+    uint8_t              extAddr[kSizeExtAddr]           = {0x41, 0x42, 0x43, 0x44, 0x45, 0x46, 0x47, 0x48};
+    uint8_t              hostAddr[OTBR_IP6_ADDRESS_SIZE] = {0};
+    const char           hostName[]                      = "custom-host";
+    std::vector<uint8_t> keyData                         = {0x01, 0x02, 0x03, 0x04, 0x05, 0x06};
 
     hostAddr[0]  = 0x20;
     hostAddr[1]  = 0x02;
@@ -101,6 +102,9 @@ void PublishSingleServiceWithCustomHost(void *aContext, Mdns::Publisher::State a
             {"nn", "cool"}, {"xp", xpanid, sizeof(xpanid)}, {"tv", "1.1.1"}, {"xa", extAddr, sizeof(extAddr)}};
 
         Mdns::Publisher::EncodeTxtData(txtList, txtData);
+
+        sContext.mPublisher->PublishKey(hostName, keyData,
+                                        [](otbrError aError) { SuccessOrDie(aError, "cannot publish key for host"); });
 
         sContext.mPublisher->PublishHost(hostName, {Ip6Address(hostAddr)},
                                          [](otbrError aError) { SuccessOrDie(aError, "cannot publish the host"); });
@@ -108,16 +112,22 @@ void PublishSingleServiceWithCustomHost(void *aContext, Mdns::Publisher::State a
         sContext.mPublisher->PublishService(
             hostName, "SingleService", "_meshcop._udp", Mdns::Publisher::SubTypeList{}, 12345, txtData,
             [](otbrError aError) { SuccessOrDie(aError, "cannot publish the service"); });
+
+        sContext.mPublisher->PublishKey("SingleService._meshcop._udp", keyData, [](otbrError aError) {
+            SuccessOrDie(aError, "cannot publish key for service");
+        });
     }
 }
 
 void PublishMultipleServicesWithCustomHost(void *aContext, Mdns::Publisher::State aState)
 {
-    uint8_t    xpanid[kSizeExtPanId]           = {0x41, 0x42, 0x43, 0x44, 0x45, 0x46, 0x47, 0x48};
-    uint8_t    extAddr[kSizeExtAddr]           = {0x41, 0x42, 0x43, 0x44, 0x45, 0x46, 0x47, 0x48};
-    uint8_t    hostAddr[OTBR_IP6_ADDRESS_SIZE] = {0};
-    const char hostName1[]                     = "custom-host-1";
-    const char hostName2[]                     = "custom-host-2";
+    uint8_t              xpanid[kSizeExtPanId]           = {0x41, 0x42, 0x43, 0x44, 0x45, 0x46, 0x47, 0x48};
+    uint8_t              extAddr[kSizeExtAddr]           = {0x41, 0x42, 0x43, 0x44, 0x45, 0x46, 0x47, 0x48};
+    uint8_t              hostAddr[OTBR_IP6_ADDRESS_SIZE] = {0};
+    const char           hostName1[]                     = "custom-host-1";
+    const char           hostName2[]                     = "custom-host-2";
+    std::vector<uint8_t> keyData1                        = {0x10, 0x20, 0x03, 0x15};
+    std::vector<uint8_t> keyData2                        = {0xCA, 0xFE, 0xBE, 0xEF};
 
     hostAddr[0]  = 0x20;
     hostAddr[1]  = 0x02;
@@ -131,6 +141,19 @@ void PublishMultipleServicesWithCustomHost(void *aContext, Mdns::Publisher::Stat
             {"nn", "cool"}, {"xp", xpanid, sizeof(xpanid)}, {"tv", "1.1.1"}, {"xa", extAddr, sizeof(extAddr)}};
 
         Mdns::Publisher::EncodeTxtData(txtList, txtData);
+
+        // For host1 and its services we register keys first, then host/services
+
+        sContext.mPublisher->PublishKey(hostName1, keyData1,
+                                        [](otbrError aError) { SuccessOrDie(aError, "cannot publish key for host"); });
+
+        sContext.mPublisher->PublishKey("MultipleService11._meshcop._udp", keyData1, [](otbrError aError) {
+            SuccessOrDie(aError, "cannot publish key for service11");
+        });
+
+        sContext.mPublisher->PublishKey("MultipleService12._meshcop._udp", keyData1, [](otbrError aError) {
+            SuccessOrDie(aError, "cannot publish key for service12");
+        });
 
         sContext.mPublisher->PublishHost(hostName1, {Ip6Address(hostAddr)},
                                          [](otbrError aError) { SuccessOrDie(aError, "cannot publish the host"); });
@@ -143,6 +166,8 @@ void PublishMultipleServicesWithCustomHost(void *aContext, Mdns::Publisher::Stat
             hostName1, "MultipleService12", "_meshcop._udp", Mdns::Publisher::SubTypeList{}, 12345, txtData,
             [](otbrError aError) { SuccessOrDie(aError, "cannot publish the second service"); });
 
+        // For host2 and its services we register host and services first, then keys.
+
         sContext.mPublisher->PublishHost(hostName2, {Ip6Address(hostAddr)}, [](otbrError aError) {
             SuccessOrDie(aError, "cannot publish the second host");
         });
@@ -154,6 +179,17 @@ void PublishMultipleServicesWithCustomHost(void *aContext, Mdns::Publisher::Stat
         sContext.mPublisher->PublishService(
             hostName2, "MultipleService22", "_meshcop._udp", Mdns::Publisher::SubTypeList{}, 12345, txtData,
             [](otbrError aError) { SuccessOrDie(aError, "cannot publish the second service"); });
+
+        sContext.mPublisher->PublishKey(hostName2, keyData2,
+                                        [](otbrError aError) { SuccessOrDie(aError, "cannot publish key for host"); });
+
+        sContext.mPublisher->PublishKey("MultipleService21._meshcop._udp", keyData2, [](otbrError aError) {
+            SuccessOrDie(aError, "cannot publish key for service21");
+        });
+
+        sContext.mPublisher->PublishKey("MultipleService22._meshcop._udp", keyData2, [](otbrError aError) {
+            SuccessOrDie(aError, "cannot publish key for service22");
+        });
     }
 }
 
