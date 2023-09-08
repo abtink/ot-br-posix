@@ -583,6 +583,7 @@ protected:
     void AddServiceRegistration(ServiceRegistrationPtr &&aServiceReg);
     void RemoveServiceRegistration(const std::string &aName, const std::string &aType, otbrError aError);
     ServiceRegistration *FindServiceRegistration(const std::string &aName, const std::string &aType);
+    ServiceRegistration *FindServiceRegistration(const std::string &aFullName);
 
     void OnServiceResolved(std::string aType, DiscoveredInstanceInfo aInstanceInfo);
     void OnServiceResolveFailed(std::string aType, std::string aInstanceName, int32_t aErrorCode);

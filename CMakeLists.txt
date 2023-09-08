@@ -113,6 +113,7 @@ add_subdirectory(third_party EXCLUDE_FROM_ALL)
 add_subdirectory(src)
 add_subdirectory(tools)
 
+add_subdirectory(tests)
 
 if(CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME)
     include(CTest)

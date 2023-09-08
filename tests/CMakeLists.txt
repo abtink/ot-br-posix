@@ -26,17 +26,17 @@
 #  POSSIBILITY OF SUCH DAMAGE.
 #
 
-if(OTBR_DBUS)
-    add_subdirectory(dbus)
-endif()
+#if(OTBR_DBUS)
+#    add_subdirectory(dbus)
+#endif()
 
 if(OTBR_MDNS)
     add_subdirectory(mdns)
 endif()
 
-if(OTBR_REST)
-    add_subdirectory(rest)
-endif()
+#if(OTBR_REST)
+#    add_subdirectory(rest)
+#endif()
 
-add_subdirectory(tools)
-add_subdirectory(unit)
+#add_subdirectory(tools)
+#add_subdirectory(unit)

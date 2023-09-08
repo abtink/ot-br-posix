@@ -110,9 +110,31 @@ void PublishSingleServiceWithCustomHost(void *aContext, Mdns::Publisher::State a
                                          [](otbrError aError) { SuccessOrDie(aError, "cannot publish the host"); });
 
         sContext.mPublisher->PublishService(
-            hostName, "SingleService", "_meshcop._udp.", Mdns::Publisher::SubTypeList{}, 12345, txtData,
-            [](otbrError aError) { SuccessOrDie(aError, "cannot publish the service"); });
+            hostName, "SingleService", "_meshcop._udp", Mdns::Publisher::SubTypeList{}, 12345, txtData,
+            [](otbrError aError)
+            {
+                std::vector<uint8_t> keyData                         = {0x01, 0x02, 0x03, 0x04, 0x05, 0x06};
+                SuccessOrDie(aError, "cannot publish the service");
+                sContext.mPublisher->PublishKey("SingleService._meshcop._udp", keyData, [](otbrError aError) {
+                      SuccessOrDie(aError, "cannot publish key for service");
+                  });
+            }
+            );
 
+        /*sContext.mPublisher->PublishKey("SingleService._meshcop._udp", keyData, [](otbrError aError) {
+            SuccessOrDie(aError, "cannot publish key for service");
+        });*/
+    }
+}
+
+void PublishKeyForService(void *aContext, Mdns::Publisher::State aState)
+{
+    std::vector<uint8_t> keyData  = {0x10, 0x20, 0x3, 0x15};
+
+
+    VerifyOrDie(aContext == &sContext, "unexpected context");
+    if (aState == Mdns::Publisher::State::kReady)
+    {
         sContext.mPublisher->PublishKey("SingleService._meshcop._udp", keyData, [](otbrError aError) {
             SuccessOrDie(aError, "cannot publish key for service");
         });
@@ -185,6 +207,8 @@ void PublishSingleService(void *aContext, Mdns::Publisher::State aState)
             [](otbrError aError) { SuccessOrDie(aError, "SingleService._meshcop._udp."); });
     }
 }
+
+
 
 void PublishSingleServiceWithEmptyName(void *aContext, Mdns::Publisher::State aState)
 {
@@ -333,6 +357,21 @@ otbrError TestSingleService(void)
 
     Mdns::Publisher *pub =
         Mdns::Publisher::Create([](Mdns::Publisher::State aState) { PublishSingleService(&sContext, aState); });
+    sContext.mPublisher = pub;
+    SuccessOrExit(ret = pub->Start());
+    RunMainloop();
+
+exit:
+    Mdns::Publisher::Destroy(pub);
+    return ret;
+}
+
+otbrError TestKeyForService(void)
+{
+    otbrError ret = OTBR_ERROR_NONE;
+
+    Mdns::Publisher *pub =
+        Mdns::Publisher::Create([](Mdns::Publisher::State aState) { PublishKeyForService(&sContext, aState); });
     sContext.mPublisher = pub;
     SuccessOrExit(ret = pub->Start());
     RunMainloop();
@@ -544,6 +583,10 @@ int main(int argc, char *argv[])
 
     case 'k':
         ret = TestStopService();
+        break;
+
+    case 'y':
+        ret = TestKeyForService();
         break;
 
     default:

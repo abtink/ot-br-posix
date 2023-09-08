@@ -132,7 +132,7 @@ private:
         ~DnssdServiceRegistration(void) override;
         const DNSServiceRef &GetServiceRef() const { return mServiceRef; }
 
-    private:
+    //private:
         DNSServiceRef mServiceRef;
     };
 

@@ -823,7 +823,7 @@ otbrError PublisherAvahi::PublishKeyImpl(const std::string &aName, const KeyData
 
     fullKeyName = MakeFullKeyName(aName);
 
-    avahiError = avahi_entry_group_add_record(group, AVAHI_IF_UNSPEC, AVAHI_PROTO_UNSPEC, AvahiPublishFlags{},
+    avahiError = avahi_entry_group_add_record(group, AVAHI_IF_UNSPEC, AVAHI_PROTO_UNSPEC, AVAHI_PUBLISH_UNIQUE,
                                               fullKeyName.c_str(), AVAHI_DNS_CLASS_IN, kDnsKeyRecordType, kDefaultTtl,
                                               aKeyData.data(), aKeyData.size());
     VerifyOrExit(avahiError == AVAHI_OK);

@@ -316,7 +316,13 @@ std::string Publisher::MakeFullKeyName(const std::string &aName)
 
 void Publisher::AddServiceRegistration(ServiceRegistrationPtr &&aServiceReg)
 {
-    mServiceRegistrations.emplace(MakeFullServiceName(aServiceReg->mName, aServiceReg->mType), std::move(aServiceReg));
+    std::string fullname = MakeFullServiceName(aServiceReg->mName, aServiceReg->mType);
+
+    otbrLogInfo("ABTIN -> AddServiceRegistration(), %s", fullname.c_str());
+
+    mServiceRegistrations.emplace(fullname, std::move(aServiceReg));
+
+    otbrLogInfo("ABTIN did find %p", FindServiceRegistration(fullname));
 }
 
 void Publisher::RemoveServiceRegistration(const std::string &aName, const std::string &aType, otbrError aError)
@@ -341,6 +347,15 @@ exit:
 Publisher::ServiceRegistration *Publisher::FindServiceRegistration(const std::string &aName, const std::string &aType)
 {
     auto it = mServiceRegistrations.find(MakeFullServiceName(aName, aType));
+
+    return it != mServiceRegistrations.end() ? it->second.get() : nullptr;
+}
+
+Publisher::ServiceRegistration *Publisher::FindServiceRegistration(const std::string &aFullName)
+{
+    otbrLogInfo("ABTIN -> Publisher::FindServiceRegistration() for %s", aFullName.c_str());
+
+    auto it = mServiceRegistrations.find(aFullName);
 
     return it != mServiceRegistrations.end() ? it->second.get() : nullptr;
 }
