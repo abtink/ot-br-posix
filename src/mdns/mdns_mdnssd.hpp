@@ -106,32 +106,27 @@ private:
     class DnssdServiceRegistration : public ServiceRegistration
     {
     public:
-        DnssdServiceRegistration(const std::string &aHostName,
-                                 const std::string &aName,
-                                 const std::string &aType,
-                                 const SubTypeList &aSubTypeList,
-                                 uint16_t           aPort,
-                                 const TxtData     &aTxtData,
-                                 ResultCallback   &&aCallback,
-                                 DNSServiceRef      aServiceRef,
-                                 PublisherMDnsSd   *aPublisher)
-            : ServiceRegistration(aHostName,
-                                  aName,
-                                  aType,
-                                  aSubTypeList,
-                                  aPort,
-                                  aTxtData,
-                                  std::move(aCallback),
-                                  aPublisher)
-            , mServiceRef(aServiceRef)
-        {
-        }
+        using ServiceRegistration::ServiceRegistration; // Inherit base constructor
 
-        ~DnssdServiceRegistration(void) override;
-        const DNSServiceRef &GetServiceRef() const { return mServiceRef; }
+        ~DnssdServiceRegistration(void) override { Unregister(); }
+
+        void      Update(MainloopContext &aMainloop) const;
+        void      Process(const MainloopContext &aMainloop, std::vector<DNSServiceRef> &aReadyServices) const;
+        otbrError Register(void);
 
     private:
-        DNSServiceRef mServiceRef;
+        void             Unregister(void);
+        PublisherMDnsSd &GetPublisher(void) { return *static_cast<PublisherMDnsSd *>(mPublisher); }
+        void             HandleRegisterResult(DNSServiceFlags aFlags, DNSServiceErrorType aError);
+        static void      HandleRegisterResult(DNSServiceRef       aServiceRef,
+                                              DNSServiceFlags     aFlags,
+                                              DNSServiceErrorType aError,
+                                              const char         *aName,
+                                              const char         *aType,
+                                              const char         *aDomain,
+                                              void               *aContext);
+
+        DNSServiceRef mServiceRef = nullptr;
     };
 
     class DnssdHostRegistration : public HostRegistration
@@ -154,10 +149,7 @@ private:
         const std::map<DNSRecordRef, Ip6Address> &GetRecordRefMap() const { return mRecordRefMap; }
         std::map<DNSRecordRef, Ip6Address>       &GetRecordRefMap() { return mRecordRefMap; }
 
-    private:
-        DNSServiceRef mServiceRef;
-
-    public:
+        DNSServiceRef                      mServiceRef;
         std::map<DNSRecordRef, Ip6Address> mRecordRefMap;
         uint32_t                           mCallbackCount;
     };
@@ -320,19 +312,6 @@ private:
     using ServiceSubscriptionList = std::vector<std::unique_ptr<ServiceSubscription>>;
     using HostSubscriptionList    = std::vector<std::unique_ptr<HostSubscription>>;
 
-    static void HandleServiceRegisterResult(DNSServiceRef         aService,
-                                            const DNSServiceFlags aFlags,
-                                            DNSServiceErrorType   aError,
-                                            const char           *aName,
-                                            const char           *aType,
-                                            const char           *aDomain,
-                                            void                 *aContext);
-    void        HandleServiceRegisterResult(DNSServiceRef         aService,
-                                            const DNSServiceFlags aFlags,
-                                            DNSServiceErrorType   aError,
-                                            const char           *aName,
-                                            const char           *aType,
-                                            const char           *aDomain);
     static void HandleRegisterHostResult(DNSServiceRef       aHostsConnection,
                                          DNSRecordRef        aHostRecord,
                                          DNSServiceFlags     aFlags,
@@ -345,8 +324,7 @@ private:
 
     static std::string MakeRegType(const std::string &aType, SubTypeList aSubTypeList);
 
-    ServiceRegistration *FindServiceRegistration(const DNSServiceRef &aServiceRef);
-    HostRegistration    *FindHostRegistration(const DNSServiceRef &aServiceRef, const DNSRecordRef &aRecordRef);
+    DnssdHostRegistration *FindHostRegistration(const DNSServiceRef &aServiceRef, const DNSRecordRef &aRecordRef);
 
     DNSServiceRef mHostsRef;
     State         mState;
