@@ -132,26 +132,24 @@ private:
     class DnssdHostRegistration : public HostRegistration
     {
     public:
-        DnssdHostRegistration(const std::string &aName,
-                              const AddressList &aAddresses,
-                              ResultCallback   &&aCallback,
-                              DNSServiceRef      aServiceRef,
-                              Publisher         *aPublisher)
-            : HostRegistration(aName, aAddresses, std::move(aCallback), aPublisher)
-            , mServiceRef(aServiceRef)
-            , mRecordRefMap()
-            , mCallbackCount(aAddresses.size())
-        {
-        }
+        using HostRegistration::HostRegistration; // Inherit base class constructor
 
-        ~DnssdHostRegistration(void) override;
-        const DNSServiceRef                      &GetServiceRef() const { return mServiceRef; }
-        const std::map<DNSRecordRef, Ip6Address> &GetRecordRefMap() const { return mRecordRefMap; }
-        std::map<DNSRecordRef, Ip6Address>       &GetRecordRefMap() { return mRecordRefMap; }
+        ~DnssdHostRegistration(void) override { Unregister(); }
 
-        DNSServiceRef                      mServiceRef;
-        std::map<DNSRecordRef, Ip6Address> mRecordRefMap;
-        uint32_t                           mCallbackCount;
+        otbrError Register(void);
+
+    private:
+        void             Unregister(void);
+        PublisherMDnsSd &GetPublisher(void) { return *static_cast<PublisherMDnsSd *>(mPublisher); }
+        void             HandleRegisterResult(DNSRecordRef aRecordRef, DNSServiceErrorType aError);
+        static void      HandleRegisterResult(DNSServiceRef       aServiceRef,
+                                              DNSRecordRef        aRecordRef,
+                                              DNSServiceFlags     aFlags,
+                                              DNSServiceErrorType aErrorCode,
+                                              void               *aContext);
+
+        std::vector<DNSRecordRef> mAddrRecordRefs;
+        std::vector<bool>         mAddrRegistered;
     };
 
     struct ServiceRef : private ::NonCopyable
@@ -311,16 +309,6 @@ private:
 
     using ServiceSubscriptionList = std::vector<std::unique_ptr<ServiceSubscription>>;
     using HostSubscriptionList    = std::vector<std::unique_ptr<HostSubscription>>;
-
-    static void HandleRegisterHostResult(DNSServiceRef       aHostsConnection,
-                                         DNSRecordRef        aHostRecord,
-                                         DNSServiceFlags     aFlags,
-                                         DNSServiceErrorType aErrorCode,
-                                         void               *aContext);
-    void        HandleRegisterHostResult(DNSServiceRef       aHostsConnection,
-                                         DNSRecordRef        aHostRecord,
-                                         DNSServiceFlags     aFlags,
-                                         DNSServiceErrorType aErrorCode);
 
     static std::string MakeRegType(const std::string &aType, SubTypeList aSubTypeList);
 

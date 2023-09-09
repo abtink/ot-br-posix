@@ -461,17 +461,47 @@ void PublisherMDnsSd::DnssdServiceRegistration::HandleRegisterResult(DNSServiceF
     }
 }
 
-PublisherMDnsSd::DnssdHostRegistration::~DnssdHostRegistration(void)
+otbrError PublisherMDnsSd::DnssdHostRegistration::Register(void)
 {
-    int dnsError;
+    DNSServiceErrorType dnsError = kDNSServiceErr_NoError;
 
-    VerifyOrExit(mServiceRef != nullptr);
+    otbrLogInfo("Registering new host %s", mName.c_str());
 
-    for (const auto &recordRefAndAddress : GetRecordRefMap())
+    for (const Ip6Address &address : mAddresses)
     {
-        const DNSRecordRef &recordRef = recordRefAndAddress.first;
-        const Ip6Address   &address   = recordRefAndAddress.second;
-        if (IsCompleted())
+        DNSRecordRef recordRef = nullptr;
+
+        dnsError = DNSServiceRegisterRecord(GetPublisher().mHostsRef, &recordRef, kDNSServiceFlagsShared,
+                                            kDNSServiceInterfaceIndexAny, MakeFullHostName(mName).c_str(),
+                                            kDNSServiceType_AAAA, kDNSServiceClass_IN, sizeof(address.m8), address.m8,
+                                            /* ttl */ 0, HandleRegisterResult, this);
+
+        VerifyOrExit(dnsError == kDNSServiceErr_NoError);
+
+        mAddrRecordRefs.push_back(recordRef);
+        mAddrRegistered.push_back(false);
+    }
+
+exit:
+    if ((dnsError != kDNSServiceErr_NoError) || mAddresses.empty())
+    {
+        HandleRegisterResult(/* aRecordRef */ nullptr, dnsError);
+    }
+
+    return GetPublisher().DnsErrorToOtbrError(dnsError);
+}
+
+void PublisherMDnsSd::DnssdHostRegistration::Unregister(void)
+{
+    DNSServiceErrorType dnsError;
+
+    VerifyOrExit(GetPublisher().mHostsRef != nullptr);
+
+    for (size_t index = 0; index < mAddrRecordRefs.size(); index++)
+    {
+        const Ip6Address &address = mAddresses[index];
+
+        if (mAddrRegistered[index])
         {
             // The Bonjour mDNSResponder somehow doesn't send goodbye message for the AAAA record when it is
             // removed by `DNSServiceRemoveRecord`. Per RFC 6762, a goodbye message of a record sets its TTL
@@ -479,41 +509,67 @@ PublisherMDnsSd::DnssdHostRegistration::~DnssdHostRegistration(void)
             // we remove the AAAA record after updating its TTL to 1 second. This has the same effect as
             // sending a goodbye message.
             // TODO: resolve the goodbye issue with Bonjour mDNSResponder.
-            dnsError = DNSServiceUpdateRecord(mServiceRef, recordRef, kDNSServiceFlagsUnique, sizeof(address.m8),
-                                              address.m8, /* ttl */ 1);
+            dnsError = DNSServiceUpdateRecord(GetPublisher().mHostsRef, mAddrRecordRefs[index], kDNSServiceFlagsUnique,
+                                              sizeof(address.m8), address.m8, /* ttl */ 1);
             otbrLogResult(DNSErrorToOtbrError(dnsError), "Send goodbye message for host %s address %s: %s",
                           MakeFullHostName(mName).c_str(), address.ToString().c_str(), DNSErrorToString(dnsError));
         }
-        dnsError = DNSServiceRemoveRecord(mServiceRef, recordRef, /* flags */ 0);
+
+        dnsError = DNSServiceRemoveRecord(GetPublisher().mHostsRef, mAddrRecordRefs[index], /* flags */ 0);
+
         otbrLogResult(DNSErrorToOtbrError(dnsError), "Remove record for host %s address %s: %s",
                       MakeFullHostName(mName).c_str(), address.ToString().c_str(), DNSErrorToString(dnsError));
-        // TODO: ?
-        // DNSRecordRefDeallocate(recordRef);
     }
 
 exit:
-    return;
+    mAddrRegistered.clear();
+    mAddrRecordRefs.clear();
 }
 
-PublisherMDnsSd::DnssdHostRegistration *PublisherMDnsSd::FindHostRegistration(const DNSServiceRef &aServiceRef,
-                                                                              const DNSRecordRef  &aRecordRef)
+void PublisherMDnsSd::DnssdHostRegistration::HandleRegisterResult(DNSServiceRef       aServiceRef,
+                                                                  DNSRecordRef        aRecordRef,
+                                                                  DNSServiceFlags     aFlags,
+                                                                  DNSServiceErrorType aError,
+                                                                  void               *aContext)
 {
-    DnssdHostRegistration *hostReg;
+    OT_UNUSED_VARIABLE(aServiceRef);
+    OT_UNUSED_VARIABLE(aFlags);
 
-    for (auto &kv : mHostRegistrations)
+    static_cast<DnssdHostRegistration *>(aContext)->HandleRegisterResult(aRecordRef, aError);
+}
+
+void PublisherMDnsSd::DnssdHostRegistration::HandleRegisterResult(DNSRecordRef aRecordRef, DNSServiceErrorType aError)
+{
+    if (aError != kDNSServiceErr_NoError)
     {
-        hostReg = static_cast<DnssdHostRegistration *>(kv.second.get());
+        otbrLogErr("Failed to register host %s: %s", mName.c_str(), DNSErrorToString(aError));
+        GetPublisher().RemoveHostRegistration(mName, DNSErrorToOtbrError(aError));
+    }
+    else
+    {
+        bool shouldComplete = !IsCompleted();
 
-        if ((hostReg->mServiceRef == aServiceRef) && hostReg->mRecordRefMap.count(aRecordRef))
+        for (size_t index = 0; index < mAddrRecordRefs.size(); index++)
         {
-            ExitNow();
+            if ((mAddrRecordRefs[index] == aRecordRef) && !mAddrRegistered[index])
+            {
+                mAddrRegistered[index] = true;
+                otbrLogInfo("Successfully registered host %s address %s", mName.c_str(),
+                            mAddresses[index].ToString().c_str());
+            }
+
+            if (!mAddrRegistered[index])
+            {
+                shouldComplete = false;
+            }
+        }
+
+        if (shouldComplete)
+        {
+            otbrLogInfo("Successfully registered all host %s addresses", mName.c_str());
+            Complete(OTBR_ERROR_NONE);
         }
     }
-
-    hostReg = nullptr;
-
-exit:
-    return hostReg;
 }
 
 otbrError PublisherMDnsSd::PublishServiceImpl(const std::string &aHostName,
@@ -565,54 +621,26 @@ otbrError PublisherMDnsSd::PublishHostImpl(const std::string &aName,
                                            const AddressList &aAddresses,
                                            ResultCallback   &&aCallback)
 {
-    otbrError                              ret   = OTBR_ERROR_NONE;
-    int                                    error = 0;
-    std::string                            fullName;
-    std::unique_ptr<DnssdHostRegistration> registration;
+    otbrError              error = OTBR_ERROR_NONE;
+    DnssdHostRegistration *hostReg;
 
-    VerifyOrExit(mState == Publisher::State::kReady, ret = OTBR_ERROR_INVALID_STATE);
-
-    fullName = MakeFullHostName(aName);
+    if (mState != State::kReady)
+    {
+        error = OTBR_ERROR_INVALID_STATE;
+        std::move(aCallback)(error);
+        ExitNow();
+    }
 
     aCallback = HandleDuplicateHostRegistration(aName, aAddresses, std::move(aCallback));
     VerifyOrExit(!aCallback.IsNull());
-    VerifyOrExit(!aAddresses.empty(), std::move(aCallback)(OTBR_ERROR_NONE));
 
-    if (mHostsRef == nullptr)
-    {
-        SuccessOrExit(error = DNSServiceCreateConnection(&mHostsRef));
-        otbrLogDebug("Created new DNSServiceRef for hosts: %p", mHostsRef);
-    }
+    hostReg = new DnssdHostRegistration(aName, aAddresses, std::move(aCallback), this);
+    AddHostRegistration(std::unique_ptr<DnssdHostRegistration>(hostReg));
 
-    registration.reset(new DnssdHostRegistration(aName, aAddresses, std::move(aCallback), mHostsRef, this));
-
-    otbrLogInfo("Registering new host %s", aName.c_str());
-    for (const auto &address : aAddresses)
-    {
-        DNSRecordRef recordRef = nullptr;
-        // Supports only IPv6 for now, may support IPv4 in the future.
-        SuccessOrExit(error = DNSServiceRegisterRecord(mHostsRef, &recordRef, kDNSServiceFlagsShared,
-                                                       kDNSServiceInterfaceIndexAny, fullName.c_str(),
-                                                       kDNSServiceType_AAAA, kDNSServiceClass_IN, sizeof(address.m8),
-                                                       address.m8, /* ttl */ 0, HandleRegisterHostResult, this));
-        registration->GetRecordRefMap()[recordRef] = address;
-    }
-
-    AddHostRegistration(std::move(registration));
+    error = hostReg->Register();
 
 exit:
-    if (error != kDNSServiceErr_NoError || ret != OTBR_ERROR_NONE)
-    {
-        if (error != kDNSServiceErr_NoError)
-        {
-            ret = DNSErrorToOtbrError(error);
-            otbrLogErr("Failed to publish/update host %s for mdnssd error: %s!", aName.c_str(),
-                       DNSErrorToString(error));
-        }
-
-        std::move(aCallback)(ret);
-    }
-    return ret;
+    return error;
 }
 
 void PublisherMDnsSd::UnpublishHost(const std::string &aName, ResultCallback &&aCallback)
@@ -627,52 +655,6 @@ exit:
     // it usually means that the mDNS publisher is already not functioning. So it's
     // okay to return success directly since the service is not advertised anyway.
     std::move(aCallback)(error);
-}
-
-void PublisherMDnsSd::HandleRegisterHostResult(DNSServiceRef       aServiceRef,
-                                               DNSRecordRef        aRecordRef,
-                                               DNSServiceFlags     aFlags,
-                                               DNSServiceErrorType aError,
-                                               void               *aContext)
-{
-    static_cast<PublisherMDnsSd *>(aContext)->HandleRegisterHostResult(aServiceRef, aRecordRef, aFlags, aError);
-}
-
-void PublisherMDnsSd::HandleRegisterHostResult(DNSServiceRef       aServiceRef,
-                                               DNSRecordRef        aRecordRef,
-                                               DNSServiceFlags     aFlags,
-                                               DNSServiceErrorType aError)
-{
-    OTBR_UNUSED_VARIABLE(aFlags);
-
-    otbrError error   = DNSErrorToOtbrError(aError);
-    auto     *hostReg = static_cast<DnssdHostRegistration *>(FindHostRegistration(aServiceRef, aRecordRef));
-
-    std::string hostName;
-
-    VerifyOrExit(hostReg != nullptr);
-
-    hostName = MakeFullHostName(hostReg->mName);
-
-    otbrLogInfo("Received reply for host %s: %s", hostName.c_str(), DNSErrorToString(aError));
-
-    if (error == OTBR_ERROR_NONE)
-    {
-        --hostReg->mCallbackCount;
-        if (!hostReg->mCallbackCount)
-        {
-            otbrLogInfo("Successfully registered host %s", hostName.c_str());
-            hostReg->Complete(OTBR_ERROR_NONE);
-        }
-    }
-    else
-    {
-        otbrLogWarning("Failed to register host %s for mdnssd error: %s", hostName.c_str(), DNSErrorToString(aError));
-        RemoveHostRegistration(hostReg->mName, error);
-    }
-
-exit:
-    return;
 }
 
 // See `regtype` parameter of the DNSServiceRegister() function for more information.
