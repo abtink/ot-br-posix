@@ -229,6 +229,8 @@ otbrError PublisherMDnsSd::Start(void)
 {
     DNSServiceErrorType dnsError;
 
+    otbrLogInfo("ABTIN -> Start()");
+
     SuccessOrExit(dnsError = DNSServiceCreateConnection(&mHostsRef));
     otbrLogDebug("Created new shared DNSServiceRef: %p", mHostsRef);
 
@@ -266,6 +268,8 @@ void PublisherMDnsSd::Stop(void)
     mSubscribedHosts.clear();
 
     mState = State::kIdle;
+
+    otbrLogInfo("ABTIN -> Stop()");
 
 exit:
     return;
@@ -345,6 +349,7 @@ void PublisherMDnsSd::Process(const MainloopContext &aMainloop)
         }
         if (error == kDNSServiceErr_ServiceNotRunning)
         {
+            otbrLogInfo("ABTIN Need to reconnedt");
             otbrLogWarning("Need to reconnect to mdnsd");
             Stop();
             Start();
@@ -414,6 +419,8 @@ otbrError PublisherMDnsSd::DnssdServiceRegistration::Register(void)
                                   /* domain */ nullptr, hostNameCString, htons(mPort), mTxtData.size(), mTxtData.data(),
                                   HandleRegisterResult, this);
 
+    otbrLogInfo("ABTIN DNSServiceRegister(), ref=%p, error:%s", mServiceRef, DNSErrorToString(dnsError));
+
     if (dnsError != kDNSServiceErr_NoError)
     {
         HandleRegisterResult(/* aFlags */ 0, dnsError);
@@ -424,6 +431,8 @@ otbrError PublisherMDnsSd::DnssdServiceRegistration::Register(void)
 
 void PublisherMDnsSd::DnssdServiceRegistration::Unregister(void)
 {
+    otbrLogInfo("ABTIN DnssdServiceRegistration::Unregister %p", mServiceRef);
+
     if (mServiceRef != nullptr)
     {
         DNSServiceRefDeallocate(mServiceRef);
@@ -494,6 +503,9 @@ exit:
 void PublisherMDnsSd::DnssdHostRegistration::Unregister(void)
 {
     DNSServiceErrorType dnsError;
+
+    otbrLogInfo("ABTIN DnssdHostRegistration::Unregister()");
+
 
     VerifyOrExit(GetPublisher().mHostsRef != nullptr);
 
