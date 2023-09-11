@@ -156,6 +156,8 @@ private:
         std::map<DNSRecordRef, Ip6Address>       &GetRecordRefMap() { return mRecordRefMap; }
 
     private:
+        PublisherMDnsSd &GetPublisher(void) { return *static_cast<PublisherMDnsSd *>(mPublisher); }
+
         DNSServiceRef mServiceRef;
 
     public:

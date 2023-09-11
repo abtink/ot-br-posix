@@ -239,13 +239,10 @@ bool PublisherMDnsSd::IsStarted(void) const
 
 void PublisherMDnsSd::Stop(void)
 {
-    ServiceRegistrationMap serviceRegistrations;
-    HostRegistrationMap    hostRegistrations;
-
     VerifyOrExit(mState == State::kReady);
 
-    std::swap(mServiceRegistrations, serviceRegistrations);
-    std::swap(mHostRegistrations, hostRegistrations);
+    mServiceRegistrations.clear();
+    mHostRegistrations.clear();
 
     if (mHostsRef != nullptr)
     {
@@ -370,6 +367,13 @@ void PublisherMDnsSd::Process(const MainloopContext &aMainloop)
         if (error == kDNSServiceErr_ServiceNotRunning)
         {
             otbrLogWarning("Need to reconnect to mdnsd");
+
+            if (mHostsRef != nullptr)
+            {
+                DNSServiceRefDeallocate(mHostsRef);
+                mHostsRef = nullptr;
+            }
+
             Stop();
             Start();
             ExitNow();
@@ -403,6 +407,7 @@ PublisherMDnsSd::DnssdHostRegistration::~DnssdHostRegistration(void)
 {
     int dnsError;
 
+    VerifyOrExit(GetPublisher().mHostsRef != nullptr);
     VerifyOrExit(mServiceRef != nullptr);
 
     for (const auto &recordRefAndAddress : GetRecordRefMap())
