@@ -111,8 +111,12 @@ private:
         kStopOnServiceNotRunningError,
     };
 
+    class DnssdKeyRegistration;
+
     class DnssdServiceRegistration : public ServiceRegistration
     {
+        friend class DnssdKeyRegistration;
+
     public:
         using ServiceRegistration::ServiceRegistration; // Inherit base constructor
 
@@ -134,10 +138,11 @@ private:
                                               const char         *aDomain,
                                               void               *aContext);
 
-        DNSServiceRef mServiceRef = nullptr;
+        DNSServiceRef          mServiceRef    = nullptr;
+        DnssdKeyRegistration * mRelatedKeyReg = nullptr;
     };
 
-    class DnssdKeyRegistration;
+
 
     class DnssdHostRegistration : public HostRegistration
     {
@@ -160,30 +165,32 @@ private:
 
         std::vector<DNSRecordRef> mAddrRecordRefs;
         std::vector<bool>         mAddrRegistered;
-        DnssdKeyRegistration *    mKeyRegistration;
     };
 
     class DnssdKeyRegistration : public KeyRegistration
     {
+        friend class DnssdServiceRegistration;
+
     public:
-        DnssdKeyRegistration(const std::string &aName,
-                             const KeyData     &aKeyData,
-                             ResultCallback   &&aCallback,
-                             DNSServiceRef      aServiceRef,
-                             DNSRecordRef       aRecordRef,
-                             Publisher         *aPublisher)
-            : KeyRegistration(aName, aKeyData, std::move(aCallback), aPublisher)
-            , mServiceRegistration(nullptr)
-            , mServiceRef(aServiceRef)
-            , mRecordRef(aRecordRef)
-        {
-        }
+        using KeyRegistration::KeyRegistration; // Inherit base class constructor
 
-        ~DnssdKeyRegistration(void) override;
+        ~DnssdKeyRegistration(void) override { Unregister(); }
 
-        DnssdServiceRegistration *mServiceRegistration;
-        DNSServiceRef             mServiceRef;
-        DNSRecordRef              mRecordRef;
+        otbrError Register(void);
+
+    private:
+        void Unregister(void);
+        PublisherMDnsSd &GetPublisher(void) { return *static_cast<PublisherMDnsSd *>(mPublisher); }
+        void             HandleRegisterResult(DNSServiceErrorType aError);
+        static void      HandleRegisterResult(DNSServiceRef       aServiceRef,
+                                              DNSRecordRef        aRecordRef,
+                                              DNSServiceFlags     aFlags,
+                                              DNSServiceErrorType aErrorCode,
+                                              void               *aContext);
+
+        DNSRecordRef              mRecordRef         = nullptr;
+        DnssdServiceRegistration *mRelatedServiceReg = nullptr
+
     };
 
     struct ServiceRef : private ::NonCopyable

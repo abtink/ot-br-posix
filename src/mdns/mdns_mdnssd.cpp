@@ -505,6 +505,11 @@ void PublisherMDnsSd::DnssdServiceRegistration::HandleRegisterResult(DNSServiceR
 
 void PublisherMDnsSd::DnssdServiceRegistration::HandleRegisterResult(DNSServiceFlags aFlags, DNSServiceErrorType aError)
 {
+    if (mReleatedKeyReg != nullptr)
+    {
+        mReleatedKeyReg->HandleRegisterResult(aError);
+    }
+
     if ((aError == kDNSServiceErr_NoError) && (aFlags & kDNSServiceFlagsAdd))
     {
         otbrLogInfo("Successfully registered service %s.%s", mName.c_str(), mType.c_str());
@@ -590,8 +595,8 @@ void PublisherMDnsSd::DnssdHostRegistration::HandleRegisterResult(DNSServiceRef 
                                                                   DNSServiceErrorType aError,
                                                                   void               *aContext)
 {
-    OT_UNUSED_VARIABLE(aServiceRef);
-    OT_UNUSED_VARIABLE(aFlags);
+    OTBR_UNUSED_VARIABLE(aServiceRef);
+    OTBR_UNUSED_VARIABLE(aFlags);
 
     static_cast<DnssdHostRegistration *>(aContext)->HandleRegisterResult(aRecordRef, aError);
 }
@@ -629,6 +634,122 @@ void PublisherMDnsSd::DnssdHostRegistration::HandleRegisterResult(DNSRecordRef a
         }
     }
 }
+
+//~~~~~~~~~~~~~~~~~~
+
+otbrError PublisherMDnsSd::DnssdKeyRegistration::Register(void)
+{
+    DNSServiceErrorType dnsError = kDNSServiceErr_NoError;
+    DnssdServiceRegistration *serviceReg;
+
+    otbrLogInfo("Registering new key %s", mName.c_str());
+
+    mRelatedServiceReg = static_cast<DnssdServiceRegistration *>(GetPublisher().FindServiceRegisteration(mName));
+
+    if (mRelatedServiceReg != nullptr)
+    {
+        dnsError = DNSServiceAddRecord(mRelatedServiceReg->mServiceRef, mRecordRef, kDNSServiceFlagsUnique, kDNSServiceType_KEY,
+                                       mKeyData.size(), mKeyData.data(), /* ttl */ 0);
+
+        VerifyOrExit(dnsError == kDNSServiceErr_NoError, mRelatedServiceReg = nullptr);
+
+        mRelatedServiceReg->mReleatedKeyReg = this;
+
+        if (mRelatedServiceReg.IsCompleted())
+        {
+            HandleRegisterResult(kDNSServiceErr_NoError);
+        }
+
+        // Otherwise we wait for service registration completion to signal
+        // key record registration as well.
+    }
+    else
+    {
+        dnsError = GetPublisher().CreateSharedHostsRef();
+        VerifyOrExit(dnsError == kDNSServiceErr_NoError);
+
+        dnsError = DNSServiceRegisterRecord(GetPublisher().mHostsRef, &mRecordRef, kDNSServiceFlagsUnique,
+                                                kDNSServiceInterfaceIndexAny, MakeFullKeyName(mName).c_str(),
+                                                kDNSServiceType_KEY, kDNSServiceClass_IN, mKeyData.size(), mKeyData.data(),
+                                                /* ttl */ 0, HandleRegisterResult, this);
+        VerifyOrExit(dnsError == kDNSServiceErr_NoError);
+    }
+
+exit:
+    if (dnsError != kDNSServiceErr_NoError)
+    {
+        HandleRegisterResult(dnsError);
+    }
+
+    return GetPublisher().DnsErrorToOtbrError(dnsError);
+}
+
+void PublisherMDnsSd::DnssdKeyRegistration::Unregister(void)
+{
+    DNSServiceErrorType dnsError;
+    DNSServiceRef       serviceRef;
+
+    VerifyOrExit(mRecordRef != nullptr);
+
+    if (mRelatedServiceReg != nullptr)
+    {
+        serviceRef = mRelatedServiceReg->mServiceRef;
+
+        mRelatedServiceReg->mReleatedKeyReg = nullptr;
+        mRelatedServiceReg                  = nullptr;
+    }
+    else
+    {
+        serviceRef = GetPublisher().mHostsRef;
+    }
+
+    VerifyOrExit(serviceRef != nullptr);
+
+    dnsError = DNSServiceRemoveRecord(serviceRef, mRecordRef, /* flags */ 0);
+
+    otbrLogInfo("Unregistered key %s: error:%s", mName.c_str(), DNSE)
+
+exit:
+    return;
+}
+
+void PublisherMDnsSd::DnssdKeyRegistration::HandleRegisterResult(DNSServiceRef       aServiceRef,
+                                                                  DNSRecordRef        aRecordRef,
+                                                                  DNSServiceFlags     aFlags,
+                                                                  DNSServiceErrorType aError,
+                                                                  void               *aContext)
+{
+    OTBR_UNUSED_VARIABLE(aServiceRef);
+    OTBR_UNUSED_VARIABLE(aRecordRef);
+    OTBR_UNUSED_VARIABLE(aFlags);
+
+    static_cast<DnssdKeyRegistration *>(aContext)->HandleRegisterResult(aRecordRef, aError);
+}
+
+void PublisherMDnsSd::DnssdKeyRegistration::HandleRegisterResult(DNSServiceErrorType aError)
+{
+    if (aError != kDNSServiceErr_NoError)
+    {
+        otbrLogErr("Failed to register key %s: %s", mName.c_str(), DNSErrorToString(aError));
+        GetPublisher().RemoveKeyRegistration(mName, DNSErrorToOtbrError(aError));
+    }
+    else
+    {
+        otbrLogInfo("Successfully registered key %s", mName.c_str());
+        Complete(OTBR_ERROR_NONE);
+    }
+}
+
+
+
+
+
+
+
+
+
+
+
 
 otbrError PublisherMDnsSd::PublishServiceImpl(const std::string &aHostName,
                                               const std::string &aName,
@@ -717,6 +838,42 @@ exit:
     // okay to return success directly since the service is not advertised anyway.
     std::move(aCallback)(error);
 }
+
+otbrError PublisherMDnsSd::PublishKeyImpl(const std::string &aName, const KeyData &aKeyData, ResultCallback &&aCallback)
+{
+    otbrError             error             = OTBR_ERROR_NONE;
+    DnssdKeyRegistration *keyReg;
+
+    if (mState != State::kReady)
+    {
+        error = OTBR_ERROR_INVALID_STATE;
+        std::move(aCallback)(error);
+        ExitNow();
+    }
+
+    aCallback = HandleDuplicateKeyRegistration(aName, aKeyData, std::move(aCallback));
+    VerifyOrExit(!aCallback.IsNull());
+
+    keyReg = new DnssdKeyRegistration(aName, aKeyData, std::move(aCallback), this);
+    AddKeyRegistration(std::unique_ptr<DnssdKeyRegistration>(keyReg));
+
+    error = keyReg->Register();
+
+exit:
+    return error;
+}
+
+void PublisherMDnsSd::UnpublishKey(const std::string &aName, ResultCallback &&aCallback)
+{
+    otbrError error = OTBR_ERROR_NONE;
+
+    VerifyOrExit(mState == Publisher::State::kReady, error = OTBR_ERROR_INVALID_STATE);
+    RemoveKeyRegistration(aName, OTBR_ERROR_ABORTED);
+
+exit:
+    std::move(aCallback)(error);
+}
+
 
 // See `regtype` parameter of the DNSServiceRegister() function for more information.
 std::string PublisherMDnsSd::MakeRegType(const std::string &aType, SubTypeList aSubTypeList)
