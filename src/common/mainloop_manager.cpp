@@ -31,20 +31,34 @@
 
 namespace otbr {
 
-void MainloopManager::AddMainloopProcessor(MainloopProcessor *aMainloopProcessor)
+MainloopManager::MainloopManager(void)
+    : mProcessing(false)
 {
-    assert(aMainloopProcessor != nullptr);
-    mMainloopProcessorList.emplace_back(aMainloopProcessor);
 }
 
-void MainloopManager::RemoveMainloopProcessor(MainloopProcessor *aMainloopProcessor)
+void MainloopManager::AddMainloopProcessor(MainloopProcessor &aMainloopProcessor)
 {
-    mMainloopProcessorList.remove(aMainloopProcessor);
+    mToAdd.emplace_back(&aMainloopProcessor);
+
+    if (!mProcessing)
+    {
+        UpdateList();
+    }
+}
+
+void MainloopManager::RemoveMainloopProcessor(MainloopProcessor &aMainloopProcessor)
+{
+    mToRemove.emplace_back(&aMainloopProcessor);
+
+    if (!mProcessing)
+    {
+        UpdateList();
+    }
 }
 
 void MainloopManager::Update(MainloopContext &aMainloop)
 {
-    for (auto &mainloopProcessor : mMainloopProcessorList)
+    for (auto &mainloopProcessor : mList)
     {
         mainloopProcessor->Update(aMainloop);
     }
@@ -52,9 +66,30 @@ void MainloopManager::Update(MainloopContext &aMainloop)
 
 void MainloopManager::Process(const MainloopContext &aMainloop)
 {
-    for (auto &mainloopProcessor : mMainloopProcessorList)
+    mProcessing = true;
+
+    for (auto &mainloopProcessor : mList)
     {
         mainloopProcessor->Process(aMainloop);
     }
+
+    mProcessing = false;
+    UpdateList();
 }
+
+void MainloopManager::UpdateList(void)
+{
+    assert(!mProcessing);
+
+    mList.insert(mList.end(), mToAdd.begin(), mToAdd.end());
+
+    for (auto &processor : mToRemove)
+    {
+        mList.remove(processor);
+    }
+
+    mToAdd.clear();
+    mToRemove.clear();
+}
+
 } // namespace otbr

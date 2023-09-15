@@ -57,7 +57,7 @@ public:
      * The constructor to initialize the mainloop manager.
      *
      */
-    MainloopManager() = default;
+    MainloopManager(void);
 
     /**
      * This method returns the singleton instance of the mainloop manager.
@@ -72,18 +72,18 @@ public:
     /**
      * This method adds a mainloop processors to the mainloop managger.
      *
-     * @param[in] aMainloopProcessor  A pointer to the mainloop processor.
+     * @param[in] aMainloopProcessor  A mainloop processor.
      *
      */
-    void AddMainloopProcessor(MainloopProcessor *aMainloopProcessor);
+    void AddMainloopProcessor(MainloopProcessor &aMainloopProcessor);
 
     /**
      * This method removes a mainloop processors from the mainloop managger.
      *
-     * @param[in] aMainloopProcessor  A pointer to the mainloop processor.
+     * @param[in] aMainloopProcessor  A mainloop processor.
      *
      */
-    void RemoveMainloopProcessor(MainloopProcessor *aMainloopProcessor);
+    void RemoveMainloopProcessor(MainloopProcessor &aMainloopProcessor);
 
     /**
      * This method updates the mainloop context of all mainloop processors.
@@ -102,7 +102,12 @@ public:
     void Process(const MainloopContext &aMainloop);
 
 private:
-    std::list<MainloopProcessor *> mMainloopProcessorList;
+    void UpdateList(void);
+
+    std::list<MainloopProcessor *> mList;
+    std::list<MainloopProcessor *> mToRemove;
+    std::list<MainloopProcessor *> mToAdd;
+    bool                           mProcessing;
 };
 } // namespace otbr
 #endif // OTBR_COMMON_MAINLOOP_MANAGER_HPP_
