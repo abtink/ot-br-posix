@@ -468,7 +468,7 @@ int main(int argc, char *argv[])
     switch (argv[1][0])
     {
     case 's':
-        switch (argv[1][1])
+        switch (argv[1][1])xxxx
         {
         case 'c':
             ret = Test(PublishSingleServiceWithCustomHost);
